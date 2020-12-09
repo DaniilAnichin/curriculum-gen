@@ -134,14 +134,12 @@ class Faculty:
             course_vect.append(Course.from_buffer(buffer))
         next(buffer)
         course_names = [c.name for c in course_vect]
-        print(course_vect)
 
         next(buffer)
         # ? location 0 of room_vect is not used (teaching in room 0 means NOT TEACHING)
         room_vect = [None]
         for i in range(rooms):
             room_vect.append(Room.from_buffer(buffer))
-        print(room_vect)
         room_names = [r.name if r else None for r in room_vect]
         next(buffer)
 
@@ -157,9 +155,6 @@ class Faculty:
                 conflict_py[(c2, c1)] = True
             curricula_vect.append(curricula_)
         next(buffer)
-        print(curricula_vect)
-        print(conflict)
-        print(conflict_py)
 
         next(buffer)
         for i in range(constraints):
