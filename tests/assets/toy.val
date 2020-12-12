@@ -1,0 +1,25 @@
+[H] Courses ArcTec and TecCos have both a lecture at period 1 (day 0, timeslot 1)
+[H] Courses TecCos and Geotec have both a lecture at period 10 (day 2, timeslot 2)
+[H] Courses TecCos and Geotec have both a lecture at period 18 (day 4, timeslot 2)
+[H] 2 lectures in room B the period 12 (day 3, timeslot 0)
+[H] 2 lectures in room A the period 13 (day 3, timeslot 1)
+[S(8)] Room A too small for course TecCos the period 1 (day 0, timeslot 1)
+[S(5)] The course SceCosC has only 2 days of lecture
+[S(5)] The course TecCos has only 3 days of lecture
+[S(5)] The course Geotec has only 3 days of lecture
+[S(2)] Curriculum Cur1 has an isolated lecture at period 10 (day 2, timeslot 2)
+[S(2)] Curriculum Cur1 has an isolated lecture at period 16 (day 4, timeslot 0)
+[S(1)] Course SceCosC uses 2 different rooms
+[S(1)] Course TecCos uses 2 different rooms
+[S(1)] Course Geotec uses 2 different rooms
+
+Violations of Lectures (hard) : 0
+Violations of Conflicts (hard) : 3
+Violations of Availability (hard) : 0
+Violations of RoomOccupation (hard) : 2
+Cost of RoomCapacity (soft) : 8
+Cost of MinWorkingDays (soft) : 15
+Cost of CurriculumCompactness (soft) : 4
+Cost of RoomStability (soft) : 3
+
+Summary: Violations = 5, Total Cost = 30

@@ -4,7 +4,7 @@ import sys
 from dataclasses import dataclass
 from functools import cached_property
 
-from .structures import *
+from .structures import Faculty, Timetable
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,8 @@ class Validator:
                 elif (p + 1) % ppd == 0:
                     if not self.timetable.curriculum_period_lectures[g][p - 1]:
                         cost += self.timetable.curriculum_period_lectures[g][p]
-                elif not (self.timetable.curriculum_period_lectures[g][p + 1] or self.timetable.curriculum_period_lectures[g][p - 1]):
+                elif not (self.timetable.curriculum_period_lectures[g][p + 1]
+                          or self.timetable.curriculum_period_lectures[g][p - 1]):
                     cost += self.timetable.curriculum_period_lectures[g][p]
         return cost
 
@@ -105,6 +106,24 @@ class Validator:
             if rooms > 1:
                 cost += rooms - 1
         return cost
+
+    @cached_property
+    def total_violation_cost(self) -> int:
+        return sum([
+            self.costs_on_lectures,
+            self.costs_on_conflicts,
+            self.costs_on_availability,
+            self.costs_on_room_occupation,
+        ])
+
+    @cached_property
+    def total_soft_cost(self) -> int:
+        return sum([
+            self.costs_on_room_capacity,
+            self.costs_on_min_working_days * self.faculty.MIN_WORKING_DAYS_COST,
+            self.costs_on_curriculum_compactness * self.faculty.CURRICULUM_COMPACTNESS_COST,
+            self.costs_on_room_stability * self.faculty.ROOM_STABILITY_COST,
+        ])
 
     def print_violations(self):
         self.print_violations_on_lectures()
@@ -131,19 +150,8 @@ class Validator:
 
     def print_total_cost(self):
         print('Summary: ', end='')
-        violations = sum([
-            self.costs_on_lectures,
-            self.costs_on_conflicts,
-            self.costs_on_availability,
-            self.costs_on_room_occupation,
-        ])
-
-        costs = sum([
-            self.costs_on_room_capacity,
-            self.costs_on_min_working_days * self.faculty.MIN_WORKING_DAYS_COST,
-            self.costs_on_curriculum_compactness * self.faculty.CURRICULUM_COMPACTNESS_COST,
-            self.costs_on_room_stability * self.faculty.ROOM_STABILITY_COST,
-        ])
+        violations = self.total_violation_cost
+        costs = self.total_soft_cost
         parts = []
         if violations:
             parts.append(f'Violations = {violations}')
@@ -200,7 +208,8 @@ class Validator:
     def print_violations_on_min_working_days(self):
         for c in range(self.faculty.courses):
             if self.timetable.working_days[c] < self.faculty.course_vect[c].min_working_days:
-                print(f'[S({self.faculty.MIN_WORKING_DAYS_COST})] The course {self.faculty.course_vect[c].name} has only {self.timetable.working_days[c]} days of lecture')
+                print(f'[S({self.faculty.MIN_WORKING_DAYS_COST})] The course {self.faculty.course_vect[c].name} '
+                      f'has only {self.timetable.working_days[c]} days of lecture')
 
     def print_violations_on_curriculum_compactness(self):
         ppd = self.faculty.periods_per_day
@@ -215,11 +224,13 @@ class Validator:
                 elif (p + 1) % ppd == 0:
                     if not self.timetable.curriculum_period_lectures[g][p - 1]:
                         cost = self.timetable.curriculum_period_lectures[g][p]
-                elif not (self.timetable.curriculum_period_lectures[g][p + 1] or self.timetable.curriculum_period_lectures[g][p - 1]):
+                elif not (self.timetable.curriculum_period_lectures[g][p + 1]
+                          or self.timetable.curriculum_period_lectures[g][p - 1]):
                     cost = self.timetable.curriculum_period_lectures[g][p]
                 if cost:
                     cost *= self.faculty.CURRICULUM_COMPACTNESS_COST
-                    print(f'[S({cost})] Curriculum {self.faculty.curricula_vect[g].name} has an isolated lecture at {self._period(p)}')
+                    print(f'[S({cost})] Curriculum {self.faculty.curricula_vect[g].name} '
+                          f'has an isolated lecture at {self._period(p)}')
 
     def print_violations_on_room_stability(self):
         for c in range(self.faculty.courses):
@@ -227,6 +238,14 @@ class Validator:
             if rooms > 1:
                 cost = (rooms - 1) * self.faculty.ROOM_STABILITY_COST
                 print(f'[S({cost})] Course {self.faculty.course_vect[c].name} uses {rooms} different rooms')
+
+
+def make_validator(faculty_filename: str, timetable_filename: str) -> Validator:
+    with open(faculty_filename) as input_file:
+        faculty = Faculty.from_stream(input_file)
+    with open(timetable_filename) as output_file:
+        timetable = Timetable.from_stream(faculty, output_file)
+    return Validator(faculty, timetable)
 
 
 def main():
@@ -243,11 +262,7 @@ def main():
         logger.error('Output file does not exist!')
         exit(1)
 
-    with open(sys.argv[1]) as input_file:
-        faculty = Faculty.from_stream(input_file)
-    with open(sys.argv[2]) as output_file:
-        timetable = Timetable.from_stream(faculty, output_file)
-    validator = Validator(faculty, timetable)
+    validator = make_validator(sys.argv[1], sys.argv[2])
 
     validator.print_violations()
     validator.print_costs()

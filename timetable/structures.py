@@ -215,11 +215,16 @@ class Timetable:
     timetable: List[List[int]]  # (courses X periods) timetable matrix
 
     # redundant data
-    room_lectures: List[List[int]]  # number of lectures per room in the same period (should be 0 or 1)
-    curriculum_period_lectures: List[List[int]]  # number of lectures per curriculum in the same period (should be 0 or 1)
-    course_daily_lectures: List[List[int]]  # number of lectures per course per day
-    working_days: List[int]  # number of days of lecture per course
-    used_rooms: List[List[int]]  # rooms used for each lecture on the course
+    # number of lectures per room in the same period (should be 0 or 1)
+    room_lectures: List[List[int]]
+    # number of lectures per curriculum in the same period (should be 0 or 1)
+    curriculum_period_lectures: List[List[int]]
+    # number of lectures per course per day
+    course_daily_lectures: List[List[int]]
+    # number of days of lecture per course
+    working_days: List[int]
+    # rooms used for each lecture on the course
+    used_rooms: List[List[int]]
 
     @classmethod
     def from_stream(cls, faculty: Faculty, buffer: IO):
@@ -228,7 +233,7 @@ class Timetable:
         curriculum_period_lectures = [[0 for i in range(faculty.periods)] for i in range(faculty.curricula)]
         course_daily_lectures = [[0 for i in range(faculty.days)] for i in range(faculty.courses)]
         working_days = [0 for i in range(faculty.courses)]
-        used_rooms = [[] for i in range(faculty.courses)]  #?
+        used_rooms = [[] for i in range(faculty.courses)]  # ?
 
         warnings = 0
         for line in buffer:
@@ -277,7 +282,7 @@ class Timetable:
         instance.update_redundant_data()
         return instance
 
-    def update_redundant_data(self):
+    def update_redundant_data(self):  # noqa: C901
         for c in range(self.faculty.courses):
             for p in range(self.faculty.periods):
                 room = self.timetable[c][p]
