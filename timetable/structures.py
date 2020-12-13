@@ -63,22 +63,6 @@ class Room:
 
 @dataclass
 class Faculty:
-    """
-    Faculty(const std::string& instance);
-
-    bool  Available(unsigned c, unsigned p) const { return availability[c][p]; }
-    bool Conflict(unsigned c1, unsigned c2) const { return conflict[c1][c2]; }
-    const Course& CourseVector(int i) const { return course_vect[i]; }
-    const Room& RoomVector(int i) const { return room_vect[i]; }
-    const Curriculum& CurriculaVector(int i) const { return curricula_vect[i]; }
-
-    bool CurriculumMember(unsigned c, unsigned g) const;
-
-    int RoomIndex(const std::string&) const;
-    int CourseIndex(const std::string&) const;
-    int CurriculumIndex(const std::string&) const;
-    int PeriodIndex(const std::string&) const;
-    """
     name: str
     rooms: int
     courses: int
@@ -194,24 +178,7 @@ class Faculty:
 
 @dataclass
 class Timetable:
-    """
-    Timetable(const Faculty & f, const std::string file_name);
-    // Inspect timetable
-    unsigned operator()(unsigned i, unsigned j) const { return tt[i][j]; }
-    unsigned& operator()(unsigned i, unsigned j) { return tt[i][j]; }
-    // Inspect redundant data
-    unsigned RoomLectures(unsigned i, unsigned j) const { return room_lectures[i][j]; }
-    unsigned CurriculumPeriodLectures(unsigned i, unsigned j) const { return curriculum_period_lectures[i][j]; }
-    unsigned CourseDailyLectures(unsigned i, unsigned j) const { return course_daily_lectures[i][j]; }
-    unsigned WorkingDays(unsigned i) const { return working_days[i]; }
-    unsigned UsedRoomsNo(unsigned i) const { return used_rooms[i].size(); }
-    unsigned UsedRooms(unsigned i, unsigned j) const { return used_rooms[i][j]; }
-    void InsertUsedRoom(unsigned i, unsigned j) { used_rooms[i].push_back(j); }
-    unsigned Warnings() const { return warnings; }
-    void UpdateRedundantData();
-    """
     faculty: Faculty
-    warnings: int
     timetable: List[List[int]]  # (courses X periods) timetable matrix
 
     # redundant data
@@ -227,7 +194,7 @@ class Timetable:
     used_rooms: List[List[int]]
 
     @classmethod
-    def from_stream(cls, faculty: Faculty, buffer: IO):
+    def from_faculty(cls, faculty: Faculty):
         tt = [[0 for i in range(faculty.periods)] for i in range(faculty.courses)]
         room_lectures = [[0 for i in range(faculty.periods)] for i in range(faculty.rooms + 1)]
         curriculum_period_lectures = [[0 for i in range(faculty.periods)] for i in range(faculty.curricula)]
@@ -235,7 +202,21 @@ class Timetable:
         working_days = [0 for i in range(faculty.courses)]
         used_rooms = [[] for i in range(faculty.courses)]  # ?
 
-        warnings = 0
+        instance = cls(
+            faculty=faculty,
+            timetable=tt,
+            room_lectures=room_lectures,
+            curriculum_period_lectures=curriculum_period_lectures,
+            course_daily_lectures=course_daily_lectures,
+            working_days=working_days,
+            used_rooms=used_rooms,
+        )
+        return instance
+
+    @classmethod
+    def from_stream(cls, faculty: Faculty, buffer: IO):
+        instance = cls.from_faculty(faculty)
+
         for line in buffer:
             course_name, room_name, day, period = line.split()
             day, period = int(day), int(period)
@@ -244,41 +225,26 @@ class Timetable:
                 c = faculty.course_names.index(course_name)
             except ValueError:
                 logger.warning('Nonexisting course %s (entry skipped)', course_name)
-                warnings += 1
                 continue
             try:
                 r = faculty.room_names.index(room_name)
             except ValueError:
                 logger.warning('Nonexisting room %s (entry skipped)', room_name)
-                warnings += 1
                 continue
             if day > faculty.days:
                 logger.warning('Nonexisting day %d (entry skipped)', day)
-                warnings += 1
                 continue
             if period > faculty.periods_per_day:
                 logger.warning('Nonexisting period %d (entry skipped)', period)
-                warnings += 1
                 continue
             p = day * faculty.periods_per_day + period
 
-            if tt[c][p]:
+            if instance.timetable[c][p]:
                 logger.warning('Repeated entry: %s (entry skipped)', line.strip())
-                warnings += 1
                 continue
 
-            tt[c][p] = r
+            instance.timetable[c][p] = r
 
-        instance = cls(
-            faculty=faculty,
-            timetable=tt,
-            warnings=warnings,
-            room_lectures=room_lectures,
-            curriculum_period_lectures=curriculum_period_lectures,
-            course_daily_lectures=course_daily_lectures,
-            working_days=working_days,
-            used_rooms=used_rooms,
-        )
         instance.update_redundant_data()
         return instance
 
