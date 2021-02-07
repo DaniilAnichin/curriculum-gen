@@ -134,7 +134,8 @@ class Validator:
         self.print_violations_on_min_working_days()
         self.print_violations_on_curriculum_compactness()
         self.print_violations_on_room_stability()
-        print()
+        if self.total_violation_cost or self.total_soft_cost:
+            print()
 
     def print_costs(self):
         print(f'Violations of Lectures (hard) : {self.costs_on_lectures}')
@@ -193,7 +194,7 @@ class Validator:
                     print(f'[H] {self.timetable.room_lectures[r][p]} lectures in room {self.faculty.room_vect[r].name}'
                           f' the {self._period(p)}', end='')
                     if self.timetable.room_lectures[r][p] > 2:
-                        print(f' [{self.timetable.room_lectures[r][p] - 1} violations]')
+                        print(f' [{self.timetable.room_lectures[r][p] - 1} violations]', end='')
                     print()
 
     def print_violations_on_room_capacity(self):

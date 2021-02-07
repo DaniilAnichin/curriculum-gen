@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from copy import deepcopy
 from dataclasses import dataclass
 from itertools import combinations
 from typing import IO, List
@@ -193,8 +194,13 @@ class Timetable:
     # rooms used for each lecture on the course
     used_rooms: List[List[int]]
 
+    def __eq__(self, other):
+        if not isinstance(other, Timetable):
+            return NotImplemented
+        return self.faculty is other.faculty and self.timetable == other.timetable
+
     @classmethod
-    def from_faculty(cls, faculty: Faculty):
+    def from_faculty(cls, faculty: Faculty) -> 'Timetable':
         tt = [[0 for i in range(faculty.periods)] for i in range(faculty.courses)]
         room_lectures = [[0 for i in range(faculty.periods)] for i in range(faculty.rooms + 1)]
         curriculum_period_lectures = [[0 for i in range(faculty.periods)] for i in range(faculty.curricula)]
@@ -212,6 +218,11 @@ class Timetable:
             used_rooms=used_rooms,
         )
         return instance
+
+    def clone(self):
+        new_timetable = self.from_faculty(self.faculty)
+        new_timetable.timetable = deepcopy(self.timetable)
+        return new_timetable
 
     @classmethod
     def from_stream(cls, faculty: Faculty, buffer: IO):
@@ -247,6 +258,16 @@ class Timetable:
 
         instance.update_redundant_data()
         return instance
+
+    def to_stream(self, buffer: IO):
+        for c in range(self.faculty.courses):
+            for p in range(self.faculty.periods):
+                room = self.timetable[c][p]
+                if room:
+                    room_name = self.faculty.room_names[room]
+                    course_name = self.faculty.course_names[c]
+                    day, period = divmod(p, self.faculty.periods_per_day)
+                    buffer.write(f'{course_name} {room_name} {day} {period}\n')
 
     def update_redundant_data(self):  # noqa: C901
         for c in range(self.faculty.courses):

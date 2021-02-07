@@ -1,19 +1,28 @@
 from pathlib import Path
 
+import pytest
+
 from timetable.validator import make_validator
 
 ASSETS_DIR = Path(__file__).parent / 'assets'
 
 
-def test_validator_toy(capsys):
-    validator = make_validator(ASSETS_DIR / 'toy.in', ASSETS_DIR / 'toy.out')
-    assert validator.total_violation_cost == 5
-    assert validator.total_soft_cost == 30
+@pytest.mark.parametrize(
+    "in_path, out_path, val_path, violation_cost, soft_cost",
+    [
+        ('toy.in', 'toy.out', 'toy.val', 5, 30),
+        ('toy.in', 'perfect.out', 'perfect.val', 0, 0),
+    ]
+)
+def test_validator_toy(capsys, in_path, out_path, val_path, violation_cost, soft_cost):
+    validator = make_validator(ASSETS_DIR / in_path, ASSETS_DIR / out_path)
+    assert validator.total_violation_cost == violation_cost
+    assert validator.total_soft_cost == soft_cost
 
     validator.print_violations()
     validator.print_costs()
     validator.print_total_cost()
 
     captured = capsys.readouterr()
-    with open(ASSETS_DIR / 'toy.val') as out:
+    with open(ASSETS_DIR / val_path) as out:
         assert captured.out == out.read()
