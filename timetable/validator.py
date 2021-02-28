@@ -1,8 +1,8 @@
 import logging
-import os
-import sys
 from dataclasses import dataclass
 from functools import cached_property
+
+import click
 
 from .structures import Faculty, Timetable
 
@@ -241,29 +241,18 @@ class Validator:
                 print(f'[S({cost})] Course {self.faculty.course_vect[c].name} uses {rooms} different rooms')
 
 
-def make_validator(faculty_filename: str, timetable_filename: str) -> Validator:
-    with open(faculty_filename) as input_file:
-        faculty = Faculty.from_stream(input_file)
-    with open(timetable_filename) as output_file:
-        timetable = Timetable.from_stream(faculty, output_file)
+def make_validator(faculty_stream, timetable_stream) -> Validator:
+    faculty = Faculty.from_stream(faculty_stream)
+    timetable = Timetable.from_stream(faculty, timetable_stream)
     return Validator(faculty, timetable)
 
 
-def main():
+@click.command()
+@click.argument('faculty', type=click.File('rt'))
+@click.argument('timetable', type=click.File('rt'))
+def main(faculty, timetable):
     logging.basicConfig(level=logging.INFO)
-    if len(sys.argv) != 3:
-        logger.info(f'Usage: {sys.argv[0]} <input_file> <solution_file>')
-        exit(1)
-
-    if not os.path.isfile(sys.argv[1]):
-        logger.error('Input file does not exist!')
-        exit(1)
-
-    if not os.path.isfile(sys.argv[2]):
-        logger.error('Output file does not exist!')
-        exit(1)
-
-    validator = make_validator(sys.argv[1], sys.argv[2])
+    validator = make_validator(faculty, timetable)
 
     validator.print_violations()
     validator.print_costs()

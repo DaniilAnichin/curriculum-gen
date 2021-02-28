@@ -15,7 +15,8 @@ ASSETS_DIR = Path(__file__).parent / 'assets'
     ]
 )
 def test_validator_toy(capsys, in_path, out_path, val_path, violation_cost, soft_cost):
-    validator = make_validator(ASSETS_DIR / in_path, ASSETS_DIR / out_path)
+    with open(ASSETS_DIR / in_path) as faculty_input, open(ASSETS_DIR / out_path) as timetable_input:
+        validator = make_validator(faculty_input, timetable_input)
     assert validator.total_violation_cost == violation_cost
     assert validator.total_soft_cost == soft_cost
 
