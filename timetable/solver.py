@@ -36,25 +36,23 @@ class Solver:
             logger.info(f'Validation cost ratio is set to {self.violation_cost}')
 
         seed(self.seed)
-        with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            timetables = list(executor.map(self.shot, (init_timetable for _ in range(self.shots))))
+        timetables = ((None, init_timetable) for _ in range(self.shots))
+        for _ in range(self.slices + 1):
+            with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                # *zip(* is for starmap
+                timetables = list(executor.map(self.shot, *zip(*timetables)))
 
-        for _ in range(self.slices):
             top = int(len(timetables) * self.slice_ratio)
             if not top:
                 break
-
-            with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                timetables = list(executor.map(self.shot, (
-                    timetable for _, timetable in nsmallest(top, timetables, key=itemgetter(0))
-                )))
+            timetables = nsmallest(top, timetables, key=itemgetter(0))
 
         return min(timetables, key=itemgetter(0))
 
-    def shot(self, timetable: Optional[Timetable]) -> Tuple[int, Timetable]:
+    def shot(self, cost: Optional[int], timetable: Optional[Timetable]) -> Tuple[int, Timetable]:
         if timetable is None:
             timetable = self.init()
-        cost = self.evaluate(timetable)
+            cost = self.evaluate(timetable)
 
         i, approves, rejects = 0, 0, 0
         for i in range(self.iterations):
