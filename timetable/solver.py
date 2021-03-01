@@ -1,9 +1,10 @@
 import logging
+import random
+import sys
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from heapq import nsmallest
 from operator import itemgetter
-from random import random, randrange, seed
 from typing import Optional, Tuple
 
 import click
@@ -18,9 +19,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Solver:
     faculty: Faculty
-    seed: Optional[int] = None
+    violation_cost: int
+    seed: int
 
-    violation_cost: Optional[int] = None
     shots: int = 1000
     iterations: int = 10000
     slices: int = 3
@@ -28,30 +29,31 @@ class Solver:
     max_consecutive_rejects: int = 10
 
     def do_the_thing(self, init_timetable: Optional[Timetable] = None) -> Tuple[int, Timetable]:
-        if self.violation_cost is None:
-            self.violation_cost = sum(
-                self.faculty.course_vect[c].lectures
-                for c in range(self.faculty.courses)
-            ) * 100
-            logger.info(f'Validation cost ratio is set to {self.violation_cost}')
-
-        seed(self.seed)
-        timetables = ((None, init_timetable) for _ in range(self.shots))
+        random.seed(self.seed)
+        timetables = [(None, init_timetable) for _ in range(self.shots)]
         for _ in range(self.slices + 1):
             with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                # *zip(* is for starmap
-                timetables = list(executor.map(self.shot, *zip(*timetables)))
+                # *zip(* is starmap replacement
+                timetables = list(executor.map(
+                    self.shot,
+                    *zip(*timetables),
+                    (random.randrange(sys.maxsize) for _ in range(self.shots)),
+                ))
 
             top = int(len(timetables) * self.slice_ratio)
             if not top:
                 break
-            timetables = nsmallest(top, timetables, key=itemgetter(0))
+            timetables = list(nsmallest(top, timetables, key=itemgetter(0)))
 
         return min(timetables, key=itemgetter(0))
 
-    def shot(self, cost: Optional[int], timetable: Optional[Timetable]) -> Tuple[int, Timetable]:
+    def shot(
+            self, cost: Optional[int], timetable: Optional[Timetable], seed: int,
+    ) -> Tuple[int, Timetable]:
+        random.seed(seed)
         if timetable is None:
             timetable = self.init()
+        if cost is None:
             cost = self.evaluate(timetable)
 
         i, approves, rejects = 0, 0, 0
@@ -74,15 +76,21 @@ class Solver:
         logger.debug(f'Finished shot on iteration #{i} after {approves} approves with score {cost}')
         return cost, timetable
 
+    @staticmethod
+    def should_accept(old_cost: int, new_cost: int) -> bool:
+        return new_cost < old_cost or random.random() < 0.1
+
+    def evaluate(self, timetable: Timetable):
+        validator = Validator(self.faculty, timetable)
+        return validator.total_violation_cost * self.violation_cost + validator.total_soft_cost
+
     def init(self) -> Timetable:  # TODO
         timetable = Timetable.from_faculty(self.faculty)
 
         for c in range(self.faculty.courses):
             for i in range(self.faculty.course_vect[c].lectures):
-                p = randrange(0, self.faculty.periods)
-                while timetable.timetable[c][p]:
-                    p = randrange(0, self.faculty.periods)
-                room = randrange(0, self.faculty.rooms) + 1
+                p = self.get_free_period(timetable, c)
+                room = self.get_free_room(timetable, c)
                 timetable.timetable[c][p] = room
 
         timetable.update_redundant_data()
@@ -92,47 +100,68 @@ class Solver:
         timetable = timetable.clone()
 
         for _ in range(1):  # Tune
-            c = randrange(self.faculty.courses)
-            i = randrange(self.faculty.course_vect[c].lectures)
+            c = random.randrange(self.faculty.courses)
+            i = random.randrange(self.faculty.course_vect[c].lectures)
 
             for p in range(self.faculty.periods):
                 room = timetable.timetable[c][p]
                 if not room:
                     continue
-                i -= 1
                 if i:
+                    i -= 1
                     continue
 
-                if random() < 0.5:
-                    new_room = randrange(0, self.faculty.rooms) + 1
-                    if new_room == room:
-                        new_room = (new_room + 1) % self.faculty.rooms + 1
+                if random.random() < 0.5:
+                    # Change the room of the lecture
+                    new_room = self.get_free_room(timetable, c)
                     timetable.timetable[c][p] = new_room
                 else:
-                    new_p = randrange(0, self.faculty.periods)
-                    if new_p == p or timetable.timetable[c][new_p]:
-                        new_p = (new_p + 1) % self.faculty.periods
-
-                    if new_p == p or timetable.timetable[c][new_p]:
-                        continue
+                    # change the period of the lecture
+                    new_p = self.get_free_period(timetable, c, p)
                     timetable.timetable[c][new_p] = timetable.timetable[c][p]
                     timetable.timetable[c][p] = 0
+                break
 
         timetable.update_redundant_data()
         return timetable
 
-    @staticmethod
-    def should_accept(old_cost: int, new_cost: int) -> bool:
-        return new_cost < old_cost or random() < 0.1
+    def get_free_period(self, timetable: Timetable, c: int, from_p: Optional[int] = None) -> int:
+        """Get random accessible period for course in timetable
+        Takes into account:
+        1) Specified course must not already take place on such period
+        2) If from_p passed, this value is forbidden too
+        TODO
+        3) Courses from same curricula / teacher must not take place on such period
+        4) ?
+        """
+        p = random.randrange(0, self.faculty.periods)
+        while timetable.timetable[c][p] or (from_p and p == from_p):
+            p = random.randrange(0, self.faculty.periods)
+        return p
 
-    def evaluate(self, timetable: Timetable):
-        validator = Validator(self.faculty, timetable)
-        return validator.total_violation_cost * self.violation_cost + validator.total_soft_cost
+    def get_free_room(self, timetable: Timetable, c: int) -> int:
+        r = random.randrange(0, self.faculty.rooms) + 1
+        return r
 
 
-def make_solver(faculty_input, **kwargs) -> Solver:
+def make_solver(faculty_input, violation_cost, seed, **kwargs) -> Solver:
     faculty = Faculty.from_stream(faculty_input)
-    return Solver(faculty, **kwargs)
+    if violation_cost is None:
+        violation_cost = sum(
+            faculty.course_vect[c].lectures
+            for c in range(faculty.courses)
+        ) * 100
+        logger.info('Validation cost ratio is set to %d', violation_cost)
+    if seed is None:
+        seed = random.randrange(sys.maxsize)
+        logger.info('Seed is set to %d', seed)
+
+    return Solver(
+        faculty=faculty,
+        violation_cost=violation_cost,
+        seed=seed,
+        **kwargs,
+    )
 
 
 @click.command()
