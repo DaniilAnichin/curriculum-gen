@@ -67,8 +67,8 @@ class Validator:
         for c in range(self.faculty.courses):
             for p in range(self.faculty.periods):
                 r = self.timetable.timetable[c][p]
-                if r and self.faculty.room_vect[r].capacity < self.faculty.course_vect[c].students:
-                    cost += self.faculty.course_vect[c].students - self.faculty.room_vect[r].capacity
+                if r and self.faculty.room_vect[r - 1].capacity < self.faculty.course_vect[c].students:
+                    cost += self.faculty.course_vect[c].students - self.faculty.room_vect[r - 1].capacity
         return cost
 
     @cached_property
@@ -191,8 +191,8 @@ class Validator:
         for p in range(self.faculty.periods):
             for r in range(self.faculty.rooms + 1):
                 if self.timetable.room_lectures[r][p] > 1:
-                    print(f'[H] {self.timetable.room_lectures[r][p]} lectures in room {self.faculty.room_vect[r].name}'
-                          f' the {self._period(p)}', end='')
+                    print(f'[H] {self.timetable.room_lectures[r][p]} lectures in room'
+                          f' {self.faculty.room_vect[r - 1].name} the {self._period(p)}', end='')
                     if self.timetable.room_lectures[r][p] > 2:
                         print(f' [{self.timetable.room_lectures[r][p] - 1} violations]', end='')
                     print()
@@ -201,9 +201,9 @@ class Validator:
         for c in range(self.faculty.courses):
             for p in range(self.faculty.periods):
                 r = self.timetable.timetable[c][p]
-                if r and self.faculty.room_vect[r].capacity < self.faculty.course_vect[c].students:
-                    cost = self.faculty.course_vect[c].students - self.faculty.room_vect[r].capacity
-                    print(f'[S({cost})] Room {self.faculty.room_vect[r].name} too small '
+                if r and self.faculty.room_vect[r - 1].capacity < self.faculty.course_vect[c].students:
+                    cost = self.faculty.course_vect[c].students - self.faculty.room_vect[r - 1].capacity
+                    print(f'[S({cost})] Room {self.faculty.room_vect[r - 1].name} too small '
                           f'for course {self.faculty.course_vect[c].name} the {self._period(p)}')
 
     def print_violations_on_min_working_days(self):

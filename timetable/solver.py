@@ -5,7 +5,7 @@ from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from heapq import nsmallest
 from operator import itemgetter
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple
 
 import click
 
@@ -25,27 +25,35 @@ class Solver:
     shots: int = 1000
     iterations: int = 10000
     slices: int = 3
-    slice_ratio: float = 0.4
+    slice_ratio: float = 0.3
     max_consecutive_rejects: int = 10
 
     def do_the_thing(self, init_timetable: Optional[Timetable] = None) -> Tuple[int, Timetable]:
         random.seed(self.seed)
-        timetables = [(None, init_timetable) for _ in range(self.shots)]
-        for _ in range(self.slices + 1):
-            with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                # *zip(* is starmap replacement
-                timetables = list(executor.map(
-                    self.shot,
-                    *zip(*timetables),
-                    (random.randrange(sys.maxsize) for _ in range(self.shots)),
-                ))
-
+        init_timetables = [(None, init_timetable) for _ in range(self.shots)]
+        timetables = self.shot_timetables(init_timetables)
+        for _ in range(self.slices):
             top = int(len(timetables) * self.slice_ratio)
             if not top:
+
                 break
-            timetables = list(nsmallest(top, timetables, key=itemgetter(0)))
+
+            timetables = self.shot_timetables(
+                list(nsmallest(top, timetables, key=itemgetter(0))),
+            )
 
         return min(timetables, key=itemgetter(0))
+
+    def shot_timetables(
+            self, timetables: Sequence[Tuple[Optional[int], Optional[Timetable]]],
+    ) -> Sequence[Tuple[int, Timetable]]:
+        with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+            # *zip(* is starmap replacement
+            return list(executor.map(
+                self.shot,
+                *zip(*timetables),
+                (random.randrange(sys.maxsize) for _ in range(self.shots)),
+            ))
 
     def shot(
             self, cost: Optional[int], timetable: Optional[Timetable], seed: int,
@@ -78,7 +86,7 @@ class Solver:
 
     @staticmethod
     def should_accept(old_cost: int, new_cost: int) -> bool:
-        return new_cost < old_cost or random.random() < 0.1
+        return new_cost < old_cost or random.random() < 0.01
 
     def evaluate(self, timetable: Timetable):
         validator = Validator(self.faculty, timetable)

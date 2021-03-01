@@ -82,7 +82,6 @@ class Faculty:
     no_availability_py: defaultdict
     conflict_py: defaultdict
     course_names: List[str]
-    room_names: List[str]
 
     MIN_WORKING_DAYS_COST: int = 5
     CURRICULUM_COMPACTNESS_COST: int = 2
@@ -114,18 +113,12 @@ class Faculty:
         conflict = [[False for i in range(courses)] for i in range(courses)]
 
         next(buffer)
-        course_vect = []
-        for i in range(courses):
-            course_vect.append(Course.from_buffer(buffer))
+        course_vect = [Course.from_buffer(buffer) for _ in range(courses)]
         next(buffer)
         course_names = [c.name for c in course_vect]
 
         next(buffer)
-        # ? location 0 of room_vect is not used (teaching in room 0 means NOT TEACHING)
-        room_vect = [None]
-        for i in range(rooms):
-            room_vect.append(Room.from_buffer(buffer))
-        room_names = [r.name if r else None for r in room_vect]
+        room_vect = [Room.from_buffer(buffer) for _ in range(rooms)]
         next(buffer)
 
         next(buffer)
@@ -172,7 +165,6 @@ class Faculty:
             no_availability_py=no_availability_py,
             conflict_py=conflict_py,
             course_names=course_names,
-            room_names=room_names,
         )
         return instance
 
@@ -206,7 +198,7 @@ class Timetable:
         curriculum_period_lectures = [[0 for i in range(faculty.periods)] for i in range(faculty.curricula)]
         course_daily_lectures = [[0 for i in range(faculty.days)] for i in range(faculty.courses)]
         working_days = [0 for i in range(faculty.courses)]
-        used_rooms = [[] for i in range(faculty.courses)]  # ?
+        used_rooms: List[List[int]] = [[] for i in range(faculty.courses)]  # ?
 
         instance = cls(
             faculty=faculty,
@@ -227,6 +219,7 @@ class Timetable:
     @classmethod
     def from_stream(cls, faculty: Faculty, buffer: IO):
         instance = cls.from_faculty(faculty)
+        room_names = [r.name for r in faculty.room_vect]
 
         for line in buffer:
             course_name, room_name, day, period = line.split()
@@ -238,7 +231,7 @@ class Timetable:
                 logger.warning('Nonexisting course %s (entry skipped)', course_name)
                 continue
             try:
-                r = faculty.room_names.index(room_name)
+                r = room_names.index(room_name) + 1
             except ValueError:
                 logger.warning('Nonexisting room %s (entry skipped)', room_name)
                 continue
@@ -264,8 +257,8 @@ class Timetable:
             for p in range(self.faculty.periods):
                 room = self.timetable[c][p]
                 if room:
-                    room_name = self.faculty.room_names[room]
-                    course_name = self.faculty.course_names[c]
+                    room_name = self.faculty.room_vect[room - 1].name
+                    course_name = self.faculty.course_vect[c].name
                     day, period = divmod(p, self.faculty.periods_per_day)
                     buffer.write(f'{course_name} {room_name} {day} {period}\n')
 
