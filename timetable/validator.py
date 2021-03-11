@@ -35,12 +35,13 @@ class Validator:
     @cached_property
     def costs_on_conflicts(self) -> int:
         cost = 0
+        covered = set()
         for c1 in range(self.faculty.courses):
-            for c2 in range(c1 + 1, self.faculty.courses):
-                if self.faculty.conflict[c1][c2]:
-                    for p in range(self.faculty.periods):
-                        if self.timetable.timetable[c1][p] and self.timetable.timetable[c2][p]:
-                            cost += 1
+            covered.add(c1)
+            for c2 in self.faculty.conflict[c1] - covered:
+                for p in range(self.faculty.periods):
+                    if self.timetable.timetable[c1][p] and self.timetable.timetable[c2][p]:
+                        cost += 1
         return cost
 
     @cached_property
@@ -171,14 +172,15 @@ class Validator:
                 print(f'[H] Too many lectures for course {self.faculty.course_vect[c].name}')
 
     def print_violations_on_conflicts(self):
+        covered = set()
         for c1 in range(self.faculty.courses):
-            for c2 in range(c1 + 1, self.faculty.courses):
-                if self.faculty.conflict[c1][c2]:
-                    for p in range(self.faculty.periods):
-                        if self.timetable.timetable[c1][p] and self.timetable.timetable[c2][p]:
-                            c1_name = self.faculty.course_vect[c1].name
-                            c2_name = self.faculty.course_vect[c2].name
-                            print(f'[H] Courses {c1_name} and {c2_name} have both a lecture at {self._period(p)}')
+            covered.add(c1)
+            for c2 in self.faculty.conflict[c1] - covered:
+                for p in range(self.faculty.periods):
+                    if self.timetable.timetable[c1][p] and self.timetable.timetable[c2][p]:
+                        c1_name = self.faculty.course_vect[c1].name
+                        c2_name = self.faculty.course_vect[c2].name
+                        print(f'[H] Courses {c1_name} and {c2_name} have both a lecture at {self._period(p)}')
 
     def print_violations_on_availability(self):
         for c in range(self.faculty.courses):

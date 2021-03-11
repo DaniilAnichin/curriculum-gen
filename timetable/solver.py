@@ -52,7 +52,7 @@ class Solver:
             return list(executor.map(
                 self.shot,
                 *zip(*timetables),
-                (random.randrange(sys.maxsize) for _ in range(self.shots)),
+                (random.randrange(sys.maxsize) for _ in range(self.shots)),  # inner seed
             ))
 
     def shot(
@@ -138,14 +138,44 @@ class Solver:
         Takes into account:
         1) Specified course must not already take place on such period
         2) If from_p passed, this value is forbidden too
+        3) Take into account forbidden periods
+        4) Courses from same curricula / teacher must not take place on such period
         TODO
-        3) Courses from same curricula / teacher must not take place on such period
-        4) ?
+        5) ?
         """
-        p = random.randrange(0, self.faculty.periods)
-        while timetable.timetable[c][p] or (from_p and p == from_p):
-            p = random.randrange(0, self.faculty.periods)
-        return p
+        periods = set(range(self.faculty.periods))
+        # 1) Specified course must not already take place on such period
+        same_possible_periods = periods.copy()
+        for p in periods:
+            if timetable.timetable[c][p]:
+                same_possible_periods.discard(p)
+
+        # 2) If from_p passed, this value is forbidden too
+        from_possible_periods = same_possible_periods.copy()
+        if from_p:
+            from_possible_periods.discard(from_p)
+
+        # 3) Take into account forbidden periods
+        available_periods = from_possible_periods.copy()
+        for p in from_possible_periods:
+            if not self.faculty.availability[c][p]:
+                available_periods.discard(p)
+
+        # 4) Courses from same curricula / teacher must not take place on such period
+        conflict_periods = available_periods.copy()
+        for conflict_course in self.faculty.conflict[c]:
+            for p in available_periods:
+                if timetable.timetable[conflict_course][p]:
+                    conflict_periods.discard(p)
+
+        if len(conflict_periods) < 2:
+            logger.warning(
+                'Only %d possible periods for course %s, skipping conflict validation',
+                len(conflict_periods), self.faculty.course_vect[c].name,
+            )
+            return random.choice(tuple(available_periods))
+
+        return random.choice(tuple(conflict_periods))
 
     def get_free_room(self, timetable: Timetable, c: int) -> int:
         r = random.randrange(0, self.faculty.rooms) + 1

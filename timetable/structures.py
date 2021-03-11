@@ -3,7 +3,7 @@ from collections import defaultdict
 from copy import deepcopy
 from dataclasses import dataclass
 from itertools import combinations
-from typing import IO, List
+from typing import IO, List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +76,10 @@ class Faculty:
     curricula_vect: List[Curriculum]
 
     availability: List[List[bool]]  # defaults to true
-    conflict: List[List[bool]]  # defaults to false
+    conflict: List[Set[int]]  # defaults to false
 
     # Added
     no_availability_py: defaultdict
-    conflict_py: defaultdict
     course_names: List[str]
 
     MIN_WORKING_DAYS_COST: int = 5
@@ -94,7 +93,6 @@ class Faculty:
     @classmethod
     def from_stream(cls, buffer: IO):
         no_availability_py = defaultdict(bool)
-        conflict_py = defaultdict(bool)
 
         def get_value(stream: IO, index: int = 1, separator: str = None) -> str:
             return next(stream).split(separator)[index]
@@ -110,7 +108,7 @@ class Faculty:
 
         periods = days * periods_per_day
         availability = [[True for i in range(periods)] for i in range(courses)]
-        conflict = [[False for i in range(courses)] for i in range(courses)]
+        conflict = [set() for i in range(courses)]
 
         next(buffer)
         course_vect = [Course.from_buffer(buffer) for _ in range(courses)]
@@ -127,10 +125,8 @@ class Faculty:
             curricula_ = Curriculum.from_buffer(buffer)
             for c1, c2 in combinations(curricula_.members, 2):
                 i1, i2 = course_names.index(c1), course_names.index(c2)
-                conflict[i1][i2] = True
-                conflict[i2][i1] = True
-                conflict_py[(c1, c2)] = True
-                conflict_py[(c2, c1)] = True
+                conflict[i1].add(i2)
+                conflict[i2].add(i1)
             curricula_vect.append(curricula_)
         next(buffer)
 
@@ -146,10 +142,8 @@ class Faculty:
         for i1, i2 in combinations(range(len(course_vect)), 2):
             c1, c2 = course_vect[i1], course_vect[i2]
             if c1.teacher == c2.teacher:
-                conflict[i1][i2] = True
-                conflict[i2][i1] = True
-                conflict_py[(c1.name, c2.name)] = True
-                conflict_py[(c2.name, c1.name)] = True
+                conflict[i1].add(i2)
+                conflict[i2].add(i1)
         instance = cls(
             name=name,
             rooms=rooms,
@@ -163,7 +157,6 @@ class Faculty:
             availability=availability,
             conflict=conflict,
             no_availability_py=no_availability_py,
-            conflict_py=conflict_py,
             course_names=course_names,
         )
         return instance
