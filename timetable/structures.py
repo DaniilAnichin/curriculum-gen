@@ -108,7 +108,7 @@ class Faculty:
 
         periods = days * periods_per_day
         availability = [[True for i in range(periods)] for i in range(courses)]
-        conflict = [set() for i in range(courses)]
+        conflict: List[Set[int]] = [set() for i in range(courses)]
 
         next(buffer)
         course_vect = [Course.from_buffer(buffer) for _ in range(courses)]
