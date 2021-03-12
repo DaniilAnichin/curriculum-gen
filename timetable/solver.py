@@ -29,7 +29,10 @@ def get_random_option(option_chances: Mapping[Any, int]) -> Any:
 class Mutation(Enum):
     change_room = 'change_room'
     change_period = 'change_period'
+    change_both = 'change_period'
     swap_room = 'swap_room'
+    swap_period = 'swap_period'
+    swap_both = 'swap_period'
 
 
 @dataclass
@@ -44,16 +47,25 @@ class Solver:
     slice_ratio: float
     max_consecutive_rejects: int
 
+    # feature toggles
+    sort_courses: bool
+    repeat_sliced_results: bool
+
     mutation_count_chances = {  # TODO Tune
-        1: 50,
-        # 2: 100,
+        1: 1,
+        # 2: 2,
         # 3: 1,
+        # 4: 1,
+        # 5: 1,
     }
 
     mutation_chances = {  # TODO Tune
         Mutation.change_room: 4,
         Mutation.change_period: 4,
-        # Mutation.swap_room: 1,
+        # Mutation.change_both: 2,
+        # Mutation.swap_room: 2,
+        # Mutation.swap_period: 2,
+        # Mutation.swap_both: 1,
     }
 
     def do_the_thing(self, init_timetable: Optional[Timetable] = None) -> Tuple[int, Timetable]:
@@ -79,7 +91,9 @@ class Solver:
                 min(timetables, key=itemgetter(0))[0],
                 max(timetables, key=itemgetter(0))[0],
             )
-            timetables = self.shot_timetables(list(islice(cycle(timetables), self.shots)))
+            if self.repeat_sliced_results:
+                timetables = list(islice(cycle(timetables), self.shots))
+            timetables = self.shot_timetables(timetables)
 
         return min(timetables, key=itemgetter(0))
 
@@ -134,7 +148,11 @@ class Solver:
     def init(self) -> Timetable:  # TODO
         timetable = Timetable.from_faculty(self.faculty)
 
-        for c in range(self.faculty.courses):
+        courses = list(range(self.faculty.courses))
+        # Shown no effect on results(
+        if self.sort_courses:
+            courses.sort(key=lambda c: -self.faculty.course_conflict_weights[c])
+        for c in courses:
             for i in range(self.faculty.course_vect[c].lectures):
                 p = self.get_free_period(timetable, c)
                 room = self.get_free_room(timetable, c, p)
@@ -147,7 +165,10 @@ class Solver:
         mutate = {
             Mutation.change_room: self.mutate_change_room,
             Mutation.change_period: self.mutate_change_period,
+            Mutation.change_both: self.mutate_change_both,
             Mutation.swap_room: self.mutate_swap_room,
+            Mutation.swap_period: self.mutate_swap_period,
+            Mutation.swap_both: self.mutate_swap_both,
         }
 
         timetable = timetable.clone()
@@ -175,11 +196,46 @@ class Solver:
         timetable.timetable[c][p] = 0
         return timetable
 
+    def mutate_change_both(self, timetable: Timetable) -> Timetable:
+        c, p, room = self.pick_course_period_room(timetable)
+        # change the period of the lecture
+        new_p = self.get_free_period(timetable, c, p)
+        new_room = self.get_free_room(timetable, c, new_p, room)
+        timetable.timetable[c][new_p] = new_room
+        timetable.timetable[c][p] = 0
+        return timetable
+
     def mutate_swap_room(self, timetable: Timetable) -> Timetable:
         from_c, from_p, from_room = self.pick_course_period_room(timetable)
         to_c, to_p, to_room = self.pick_course_period_room(timetable, bad_course=from_c)
         timetable.timetable[from_c][from_p] = to_room
         timetable.timetable[to_c][to_p] = from_room
+        return timetable
+
+    def mutate_swap_period(self, timetable: Timetable) -> Timetable:
+        from_c, from_p, from_room = self.pick_course_period_room(timetable)
+        to_c, to_p, to_room = self.pick_course_period_room(timetable, bad_course=from_c)
+        if timetable.timetable[from_c][to_p] or timetable.timetable[to_c][from_p]:
+            # Cannot swap this pair
+            return timetable
+
+        timetable.timetable[from_c][from_p] = 0
+        timetable.timetable[from_c][to_p] = from_room
+        timetable.timetable[to_c][to_p] = 0
+        timetable.timetable[to_c][from_p] = to_room
+        return timetable
+
+    def mutate_swap_both(self, timetable: Timetable) -> Timetable:
+        from_c, from_p, from_room = self.pick_course_period_room(timetable)
+        to_c, to_p, to_room = self.pick_course_period_room(timetable, bad_course=from_c)
+        if timetable.timetable[from_c][to_p] or timetable.timetable[to_c][from_p]:
+            # Cannot swap this pair
+            return timetable
+
+        timetable.timetable[from_c][from_p] = 0
+        timetable.timetable[from_c][to_p] = to_room
+        timetable.timetable[to_c][to_p] = 0
+        timetable.timetable[to_c][from_p] = from_room
         return timetable
 
     def pick_course_period_room(self, timetable: Timetable, bad_course: Optional[int] = None) -> Tuple[int, int, int]:
@@ -286,6 +342,8 @@ def make_solver(faculty_input, violation_cost, seed, **kwargs) -> Solver:
 @click.option('--slices', type=int, default=5, show_default=True)
 @click.option('--slice-ratio', type=float, default=0.5, show_default=True)
 @click.option('--max-consecutive-rejects', type=int, default=20, show_default=True)
+@click.option('--sort-courses', type=bool, default=True, show_default=True)
+@click.option('--repeat-sliced-results', type=bool, default=True, show_default=True)
 def main(faculty, output, from_solution, log_level, **solver_kwargs):
     logging.basicConfig(
         format='%(asctime)s - [%(levelname)s] - [%(name)s] - %(filename)s:%(lineno)d - %(message)s',
