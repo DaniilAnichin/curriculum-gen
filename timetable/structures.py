@@ -81,6 +81,7 @@ class Faculty:
     # Added
     no_availability_py: defaultdict
     course_names: List[str]
+    course_conflict_weights: List[int]
 
     MIN_WORKING_DAYS_COST: int = 5
     CURRICULUM_COMPACTNESS_COST: int = 2
@@ -114,6 +115,7 @@ class Faculty:
         course_vect = [Course.from_buffer(buffer) for _ in range(courses)]
         next(buffer)
         course_names = [c.name for c in course_vect]
+        course_conflict_weights = [0 for _ in range(courses)]
 
         next(buffer)
         room_vect = [Room.from_buffer(buffer) for _ in range(rooms)]
@@ -125,6 +127,8 @@ class Faculty:
             curricula_ = Curriculum.from_buffer(buffer)
             for c1, c2 in combinations(curricula_.members, 2):
                 i1, i2 = course_names.index(c1), course_names.index(c2)
+                course_conflict_weights[i1] += 1
+                course_conflict_weights[i2] += 1
                 conflict[i1].add(i2)
                 conflict[i2].add(i1)
             curricula_vect.append(curricula_)
@@ -137,6 +141,7 @@ class Faculty:
             c = course_names.index(course_name)
             availability[c][p] = False
             no_availability_py[(course_name, p)] = True
+            course_conflict_weights[c] += 1
 
         # Add same-teacher constraints
         for i1, i2 in combinations(range(len(course_vect)), 2):
@@ -144,6 +149,13 @@ class Faculty:
             if c1.teacher == c2.teacher:
                 conflict[i1].add(i2)
                 conflict[i2].add(i1)
+                course_conflict_weights[i1] += 1
+                course_conflict_weights[i2] += 1
+
+        for c in range(courses):
+            # Add lectures multiplier
+            course_conflict_weights[c] *= course_vect[c].lectures
+
         instance = cls(
             name=name,
             rooms=rooms,
@@ -158,6 +170,7 @@ class Faculty:
             conflict=conflict,
             no_availability_py=no_availability_py,
             course_names=course_names,
+            course_conflict_weights=course_conflict_weights,
         )
         return instance
 
