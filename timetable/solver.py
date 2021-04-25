@@ -307,7 +307,7 @@ class Solver:
         return random.choice(tuple(from_rooms))
 
 
-def make_solver(faculty_input, violation_cost, seed, **kwargs) -> Solver:
+def make_solver(faculty_input, violation_cost=None, seed=None, **kwargs) -> Solver:
     faculty = Faculty.from_stream(faculty_input)
     if violation_cost is None:
         violation_cost = sum(
