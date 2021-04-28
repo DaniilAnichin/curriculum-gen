@@ -1,14 +1,13 @@
 import logging
 import sys
 from functools import partial
-from typing import Optional
 
+import pyqtgraph as pg
 from PyQt5 import QtWidgets as qt
 from PyQt5.QtCore import QThread, pyqtSignal
-from pyqtgraph import PlotWidget
 
-from .import main_window_ui, progress_window_ui
-from .solver import make_solver, Solver
+from . import main_window_ui, progress_window_ui
+from .solver import Solver, make_solver
 from .structures import Timetable
 
 logger = logging.getLogger(__name__)
@@ -25,8 +24,8 @@ def file_picker(parent, to_input: qt.QLineEdit, title: str, save: bool = False):
 
 
 class SolverThread(QThread):
+    finished: pyqtSignal  # type: ignore
     update_charts = pyqtSignal(object)
-    finished = pyqtSignal()
     best_score = pyqtSignal(int)
     timetable = pyqtSignal(object)
 
@@ -47,12 +46,12 @@ class SolverThread(QThread):
 
 
 class ProgressWindow(qt.QMainWindow, progress_window_ui.Ui_MainWindow):
-    x: list
+    x_slice: list
     y_time: list
     y_best: list
     y_worst: list
-    time_graph: Optional[qt.QWidget]
-    score_graph: Optional[qt.QWidget]
+    time_graph: qt.QWidget
+    score_graph: qt.QWidget
 
     def __init__(self, parent=None):
         super(ProgressWindow, self).__init__(parent)
@@ -60,17 +59,17 @@ class ProgressWindow(qt.QMainWindow, progress_window_ui.Ui_MainWindow):
         self.setup_charts()
 
     def setup_charts(self):
-        self.time_graph = PlotWidget()
+        self.time_graph = pg.PlotWidget(title='Time spent')
         top = qt.QVBoxLayout()
         top.addWidget(self.time_graph)
         self.frame_2.setLayout(top)
 
-        self.score_graph = PlotWidget()
+        self.score_graph = pg.PlotWidget(title='Scores obtained')
         bottom = qt.QVBoxLayout()
         bottom.addWidget(self.score_graph)
         self.frame.setLayout(bottom)
 
-        self.x = []
+        self.x_slice = []
         self.y_time = []
         self.y_best = []
         self.y_worst = []
@@ -78,25 +77,63 @@ class ProgressWindow(qt.QMainWindow, progress_window_ui.Ui_MainWindow):
         self.time_graph.setBackground('w')
         self.score_graph.setBackground('w')
         self.time_graph.setLogMode(False, True)
+        self.time_graph.plotItem.titleLabel.setAttr('justify', 'right')
+        self.score_graph.plotItem.titleLabel.setAttr('justify', 'right')
+        self.time_graph.setLabel('bottom', 'Shot slices')
+        self.time_graph.setLabel('left', 'Time spent')
+        self.score_graph.setLabel('bottom', 'Shot slices')
+        self.score_graph.setLabel('left', 'Scores obtained')
         self.time_data_line = self.time_graph.plot(
-            self.x, self.y_time, symbol='+', symbolSize=10, symbolBrush=('b'),
+            self.x_slice, self.y_time, symbol='+', symbolSize=10, symbolBrush=('b'),
         )
         self.best_data_line = self.score_graph.plot(
-            self.x, self.y_best, symbol='o', symbolSize=10, symbolBrush=('g'),
+            self.x_slice, self.y_best, symbol='o', symbolSize=10, symbolBrush=('g'),
         )
         self.worst_data_line = self.score_graph.plot(
-            self.x, self.y_worst, symbol='x', symbolSize=10, symbolBrush=('r'),
+            self.x_slice, self.y_worst, symbol='x', symbolSize=10, symbolBrush=('r'),
+        )
+        self.setup_crosshair()
+
+    def setup_crosshair(self):
+        def timeMouseMoved(event):
+            if self.time_graph.sceneBoundingRect().contains(event[0]):
+                point = self.time_graph.plotItem.vb.mapSceneToView(event[0])
+                index = int(round(point.x()))
+                if index in self.x_slice:
+                    self.time_graph.setTitle(
+                        f"<span style='font-size: 12pt'>slice={index}, "
+                        f"<span style='color: blue'>time={self.y_time[index]:0.2f} seconds</span>"
+                        f"</span>",
+                    )
+
+        def scoreMouseMoved(event):
+            if self.score_graph.sceneBoundingRect().contains(event[0]):
+                point = self.score_graph.plotItem.vb.mapSceneToView(event[0])
+                index = int(round(point.x()))
+                if index in self.x_slice:
+                    self.score_graph.setTitle(
+                        f"<span style='font-size: 12pt'>slice={index}, "
+                        f"<span style='color: green'>best={self.y_best[index]}</span>,"
+                        f"<span style='color: red'>worst={self.y_worst[index]}</span>"
+                        f"</span>",
+                    )
+
+        self._time_proxy = pg.SignalProxy(
+            self.time_graph.scene().sigMouseMoved, rateLimit=60, slot=timeMouseMoved,
+        )
+        self._score_proxy = pg.SignalProxy(
+            self.score_graph.scene().sigMouseMoved, rateLimit=60, slot=scoreMouseMoved,
         )
 
     def redraw(self):
-        self.time_data_line.setData(self.x, self.y_time)
-        self.best_data_line.setData(self.x, self.y_best)
-        self.worst_data_line.setData(self.x, self.y_worst)
+        self.time_data_line.setData(self.x_slice, self.y_time)
+        self.best_data_line.setData(self.x_slice, self.y_best)
+        self.worst_data_line.setData(self.x_slice, self.y_worst)
 
     def update_charts(self, data):
         self.progressBar.setValue(data['nslice'])
         self.set_best_score(data['best'])
-        self.x.append(data['nslice'])
+        self.x_slice.append(data['nslice'])
         self.y_time.append(data['shot_time'])
         self.y_best.append(data['best'])
         self.y_worst.append(data['worst'])
@@ -111,20 +148,18 @@ class ProgressWindow(qt.QMainWindow, progress_window_ui.Ui_MainWindow):
         self.score_graph.setXRange(0, slices)
         self.progressBar.setMaximum(slices)
 
-        self.thread = SolverThread(solver, from_solution)
-        self.thread.finished.connect(self.thread.quit)
-        self.thread.finished.connect(self.thread.deleteLater)
+        self._thread = SolverThread(solver, from_solution)
+        self._thread.finished.connect(self._thread.quit)
+        self._thread.finished.connect(self._thread.deleteLater)
 
-        self.thread.update_charts.connect(self.update_charts)
-        self.thread.best_score.connect(self.set_best_score)
-        self.thread.timetable.connect(solution_saver)
+        self._thread.update_charts.connect(self.update_charts)
+        self._thread.best_score.connect(self.set_best_score)
+        self._thread.timetable.connect(solution_saver)
 
-        self.thread.start()
+        self._thread.start()
 
         button.setEnabled(False)
-        self.thread.finished.connect(
-            lambda: button.setEnabled(True)
-        )
+        self._thread.finished.connect(lambda: button.setEnabled(True))
 
 
 class TimetableWindow(qt.QMainWindow, main_window_ui.Ui_MainWindow):

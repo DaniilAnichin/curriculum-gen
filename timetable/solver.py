@@ -9,7 +9,7 @@ from heapq import nsmallest
 from itertools import cycle, islice
 from operator import itemgetter
 from time import perf_counter, sleep
-from typing import Any, Mapping, Optional, Sequence, Tuple, Callable
+from typing import Any, Callable, Generator, Mapping, Optional, Sequence, Tuple
 
 import click
 
@@ -29,7 +29,7 @@ def get_random_option(option_chances: Mapping[Any, int]) -> Any:
 
 
 @contextmanager
-def timeit() -> float:
+def timeit() -> Generator[Callable, None, None]:
     start = perf_counter()
     yield lambda: perf_counter() - start
 
