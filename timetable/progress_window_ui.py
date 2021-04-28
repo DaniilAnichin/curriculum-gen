@@ -36,7 +36,7 @@ class Ui_MainWindow(object):
         self.horizontalLayout.addWidget(self.label)
         self.progressBar = QtWidgets.QProgressBar(self.centralwidget)
         self.progressBar.setMaximum(5)
-        self.progressBar.setProperty("value", 2)
+        self.progressBar.setProperty("value", 0)
         self.progressBar.setObjectName("progressBar")
         self.horizontalLayout.addWidget(self.progressBar)
         spacerItem = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
@@ -60,7 +60,7 @@ class Ui_MainWindow(object):
         MainWindow.setWindowTitle(_translate("MainWindow", "Solver progress"))
         self.label.setText(_translate("MainWindow", "Slices:"))
         self.progressBar.setFormat(_translate("MainWindow", "%v / %m"))
-        self.label_2.setText(_translate("MainWindow", "Current score - 58842"))
+        self.label_2.setText(_translate("MainWindow", "Current score - "))
 
 
 if __name__ == "__main__":

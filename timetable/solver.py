@@ -2,12 +2,14 @@ import logging
 import random
 import sys
 from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import Enum
 from heapq import nsmallest
 from itertools import cycle, islice
 from operator import itemgetter
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from time import perf_counter, sleep
+from typing import Any, Mapping, Optional, Sequence, Tuple, Callable
 
 import click
 
@@ -24,6 +26,16 @@ def get_random_option(option_chances: Mapping[Any, int]) -> Any:
         for count, chances in option_chances.items()
         for _ in range(chances)
     ])
+
+
+@contextmanager
+def timeit() -> float:
+    start = perf_counter()
+    yield lambda: perf_counter() - start
+
+
+def get_cost_range(timetables: Sequence[Tuple[int, Timetable]]) -> Tuple[int, int]:
+    return min(timetables, key=itemgetter(0))[0], max(timetables, key=itemgetter(0))[0]
 
 
 class Mutation(Enum):
@@ -68,38 +80,50 @@ class Solver:
         Mutation.swap_both: 1,
     }
 
-    def do_the_thing(self, init_timetable: Optional[Timetable] = None) -> Tuple[int, Timetable]:
+    def do_the_thing(
+            self,
+            init_timetable: Optional[Timetable] = None,
+            callback: Optional[Callable] = None,
+    ) -> Tuple[int, Timetable]:
         random.seed(self.seed)
         init_timetables = [(None, init_timetable) for _ in range(self.shots)]
-        timetables = self.shot_timetables(init_timetables)
+        with timeit() as t:
+            timetables = self.shot_timetables(init_timetables)
+        shot_time = t()
         logger.info(
             'Got %d timetables, cost range - [%d, %d]',
-            self.shots,
-            min(timetables, key=itemgetter(0))[0],
-            max(timetables, key=itemgetter(0))[0],
+            self.shots, *get_cost_range(timetables),
         )
 
-        for _ in range(self.slices):
+        for nslice in range(self.slices):
             top = int(len(timetables) * self.slice_ratio)
             if not top:
                 break
 
             timetables = list(nsmallest(top, timetables, key=itemgetter(0)))
+            best, worst = get_cost_range(timetables)
             logger.info(
                 'Selected %d top timetables, cost range - [%d, %d]',
-                top,
-                min(timetables, key=itemgetter(0))[0],
-                max(timetables, key=itemgetter(0))[0],
+                top, best, worst,
             )
+            if callback:
+                callback(nslice=nslice, shot_time=shot_time, best=best, worst=worst)
             if self.repeat_sliced_results:
                 timetables = list(islice(cycle(timetables), self.shots))
-            timetables = self.shot_timetables(timetables)
+            with timeit() as t:
+                timetables = self.shot_timetables(timetables)
+            shot_time = t()
 
-        return min(timetables, key=itemgetter(0))
+        best, timetable = min(timetables, key=itemgetter(0))
+        if callback:
+            callback(nslice=nslice + 1, shot_time=shot_time, best=best, worst=best)
+
+        return best, timetable
 
     def shot_timetables(
             self, timetables: Sequence[Tuple[Optional[int], Optional[Timetable]]],
     ) -> Sequence[Tuple[int, Timetable]]:
+        sleep(0)
         with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
             # *zip(* is starmap replacement
             return list(executor.map(
