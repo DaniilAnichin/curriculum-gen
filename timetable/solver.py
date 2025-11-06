@@ -74,10 +74,10 @@ class Solver:
     mutation_chances = {  # TODO Tune
         Mutation.change_room: 4,
         Mutation.change_period: 4,
-        Mutation.change_both: 2,
-        Mutation.swap_room: 2,
-        Mutation.swap_period: 2,
-        Mutation.swap_both: 1,
+        # Mutation.change_both: 2,
+        # Mutation.swap_room: 2,
+        # Mutation.swap_period: 2,
+        # Mutation.swap_both: 1,
     }
 
     def do_the_thing(

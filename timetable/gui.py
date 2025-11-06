@@ -175,7 +175,7 @@ class TimetableWindow(qt.QMainWindow, main_window_ui.Ui_MainWindow):
         self.pick_faculty.clicked.connect(partial(
             file_picker, self, self.edit_faculty, 'Select faculty file',
         ))
-        self.edit_faculty.setText('/home/daniil/projects/freestyle/diss/sources/tests/assets/toy.in')
+        self.edit_faculty.setText('/home/daniil/projects/freestyle/diss/data/datasets/curriculum/comp01.ctt.txt')
         self.pick_output.clicked.connect(partial(
             file_picker, self, self.edit_output, 'Select faculty file', save=True,
         ))
